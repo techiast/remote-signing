@@ -79,7 +79,7 @@ func (w Wallet) getEthereumSignature(data []byte, r []byte, s []byte) ([]byte, e
 	}
 
 	pubKeyFromSig, err := signatureInst.RecoverPublicKey(data)
-	if err != nil || pubKeyFromSig != w.pkey {
+	if err != nil || pubKeyFromSig.String() != w.pkey.String() {
 		signature = append(rsSignature, []byte{1}...)
 		signatureInst, err = crypto.ParseSignature(signature)
 		if err != nil {
@@ -87,7 +87,7 @@ func (w Wallet) getEthereumSignature(data []byte, r []byte, s []byte) ([]byte, e
 		}
 
 		pubKeyFromSig, err = signatureInst.RecoverPublicKey(data)
-		if err != nil || pubKeyFromSig != w.pkey {
+		if err != nil || pubKeyFromSig.String() != w.pkey.String() {
 			return nil, errors.New("can not reconstruct public key from sig")
 		}
 	}
@@ -162,6 +162,9 @@ func NewWallet(params map[string]string) (interface{}, error) {
 		keyId: keyId,
 		addr:  NewAccountAddressFromPublicKey(pubkeyFromAws),
 	}
+
+	fmt.Printf("wallet address: %+v \n", wallet.addr.String())
+	fmt.Printf("pubkey: %+v \n", wallet.pkey.SerializeCompressed())
 
 	return wallet, nil
 }
