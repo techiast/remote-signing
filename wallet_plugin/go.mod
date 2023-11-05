@@ -4,8 +4,6 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.21.2
 	github.com/aws/aws-sdk-go-v2/config v1.19.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.24.7
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0
-	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
 )
 
 require (

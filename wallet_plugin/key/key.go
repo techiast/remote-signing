@@ -2,40 +2,15 @@ package crypto
 
 import (
 	"encoding/hex"
-	"errors"
-	"golang.org/x/crypto/sha3"
 
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/remote-signing/wallet_plugin/secp256k1"
+	"github.com/remote-signing/wallet_plugin/sha3"
 )
 
 const (
 	// PrivateKeyLen is the byte length of a private key
 	PrivateKeyLen = 32
 )
-
-// PrivateKey is a type representing a private key.
-// TODO private key always includes public key? or create KeyPair struct
-// for both private key and public key
-type PrivateKey struct {
-	real *secp256k1.PrivateKey
-}
-
-// String returns the string representation.
-func (key *PrivateKey) String() string {
-	return "0x" + hex.EncodeToString(key.Bytes())
-}
-
-// PublicKey generates a public key paired with itself.
-func (key *PrivateKey) PublicKey() *PublicKey {
-	return &PublicKey{
-		real: key.real.PubKey(),
-	}
-}
-
-// Bytes returns bytes form of private key.
-func (key *PrivateKey) Bytes() []byte {
-	return key.real.Serialize()
-}
 
 // TODO add 'func ToECDSA() ecdsa.PrivateKey' if needed
 
@@ -85,29 +60,6 @@ func (key *PublicKey) Equal(key2 *PublicKey) bool {
 // String returns the string representation.
 func (key *PublicKey) String() string {
 	return "0x" + hex.EncodeToString(key.SerializeCompressed())
-}
-
-// TODO add 'func ToECDSA() ecdsa.PublicKey' if needed
-
-// GenerateKeyPair generates a private and public key pair.
-func GenerateKeyPair() (privKey *PrivateKey, pubKey *PublicKey) {
-	sk, err := secp256k1.GeneratePrivateKey()
-	if err != nil {
-		panic(err)
-	}
-	pk := sk.PubKey()
-	return &PrivateKey{real: sk}, &PublicKey{real: pk}
-}
-
-// ParsePrivateKey parse private key and return private key object.
-func ParsePrivateKey(b []byte) (*PrivateKey, error) {
-	if len(b) != PrivateKeyLen {
-		return nil, errors.New("InvalidKeyLength")
-	}
-
-	return &PrivateKey{
-		real: secp256k1.PrivKeyFromBytes(b),
-	}, nil
 }
 
 func SHA3Sum256(m []byte) []byte {

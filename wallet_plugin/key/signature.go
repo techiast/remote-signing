@@ -4,8 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
-	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
+	"github.com/remote-signing/wallet_plugin/ecdsa"
 )
 
 const (
@@ -15,6 +14,8 @@ const (
 	SignatureLenRaw = 64
 	// HashLen is the bytes length of hash for signature
 	HashLen = 32
+
+	compactSigMagicOffset = 27
 )
 
 // Signature is a type representing an ECDSA signature with or without V.
@@ -22,24 +23,12 @@ type Signature struct {
 	bytes []byte // 65 bytes of [V|R|S] if it has V otherwise its [R|S]
 }
 
-const compactSigMagicOffset = 27
-
 func recoverFlagToECDSA(flag byte) byte {
 	return flag + compactSigMagicOffset
 }
 
 func recoverFlagToCompatible(flag byte) byte {
 	return flag - compactSigMagicOffset
-}
-
-// NewSignature calculates an ECDSA signature including V, which is 0 or 1.
-func NewSignature(hash []byte, privKey *PrivateKey) (*Signature, error) {
-	if len(hash) == 0 || len(hash) > HashLen || privKey == nil {
-		return nil, errors.New("Invalid arguments")
-	}
-	return &Signature{
-		bytes: ecdsa.SignCompact(privKey.real, hash, false),
-	}, nil
 }
 
 // ParseSignature parses a signature from the raw byte array of 64([R|S]) or
@@ -151,23 +140,6 @@ func (sig *Signature) RecoverPublicKey(hash []byte) (*PublicKey, error) {
 		return nil, err
 	}
 	return &PublicKey{real: pk}, err
-}
-
-// Verify verifies the signature of hash using the public key.
-func (sig *Signature) Verify(msg []byte, pubKey *PublicKey) bool {
-	if len(msg) == 0 || len(msg) > HashLen || pubKey == nil || len(sig.bytes) < SignatureLenRaw {
-		return false
-	}
-	r := new(secp256k1.ModNScalar)
-	s := new(secp256k1.ModNScalar)
-	var offset int
-	if len(sig.bytes) == SignatureLenRawWithV {
-		offset = 1
-	}
-	r.SetByteSlice(sig.bytes[offset : offset+32])
-	s.SetByteSlice(sig.bytes[offset+32:])
-	sigReal := ecdsa.NewSignature(r, s)
-	return sigReal.Verify(msg, pubKey.real)
 }
 
 // String returns the string representation.
