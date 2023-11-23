@@ -12,27 +12,32 @@ npm i
 #or
 yarn
 ```
-2. Update the variable
-```js
-const KEY_ID = "your kms key id";
-const KMS = new AWS.KMS({
-  region: 'your kms region',
-  accessKeyId: 'your access key id',
-  secretAccessKey: 'your secret access key'
-});
+2. create .env bases on the .env.example file and fill your variables
 
-// Icon transaction parameters
-const ICON_TX_TO = "your wallet address";
-const ICON_RPC_URL = 'icon rpc url';
 
-// example
-// const ICON_TX_TO = "hxcf3c97ceb9ee43b0bd1cf1aaecb988b1605af9d2";
-// const ICON_RPC_URL = 'https://berlin.net.solidwallet.io/api/v3';
+```bash
+# KMS Key id
+KMS_KEY_ID=
 
+# AWS config
+AWS_REGION=
+AWS_ACCESS_KEY=
+AWS_SECRET_KEY=
+
+# ICON config
+ICON_ADDRESS_TO=
+ICON_RPC_URL=
 ```
+
+# example
+```
+ICON_ADDRESS_TO=hxcf3c97ceb9ee43b0bd1cf1aaecb988b1605af9d2
+ICON_RPC_URL=https://berlin.net.solidwallet.io/api/v3
+```
+
 3. Run demo
 ```bash
-npm start
+npm test
 # or
-yarn start
+yarn test
 ```

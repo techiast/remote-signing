@@ -6,12 +6,13 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
+	"math/big"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/remote-signing/wallet_plugin/address"
 	crypto "github.com/remote-signing/wallet_plugin/key"
-	"math/big"
 )
 
 const awsKmsSignOperationMessageType = "DIGEST"
