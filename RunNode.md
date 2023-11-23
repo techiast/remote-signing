@@ -4,8 +4,10 @@
 https://docs.icon.community/getting-started/how-to-run-a-validator-node
 
 #### II. How to run node
-1. Config wallet plugin
-for arch arm please change the config to
+1. Config wallet plugin for arch arm please change the config to
+- Move the folder to run node and make config folder
+- Copy file wallet.so from our source at `\config` folder to config folder that you have created above
+
 ```bash
 GOLOOP_KEY_PLUGIN: "/goloop/config/wallet.so"
 ```
