@@ -18,3 +18,5 @@ GOLOOP_KEY_PLUGIN_OPTIONS: '{"region":"REGION","access_key_id":"ACCESS_KEY","sec
 ```bash
 docker compose up
 ```
+5. Diagram 
+![wallet-plugin-structure](https://github.com/techiast/remote-signing/assets/116485607/9b92b560-16b9-426e-96ef-dc72ee29ad87)
