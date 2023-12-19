@@ -5,7 +5,8 @@
   "main": "main.js",
   "module": "commonjs",
   "scripts": {
-    "test": "node --env-file .env ./src/scripts/signing-test.js"
+    "test-kms": "node --env-file .env ./src/scripts/signing-test.js",
+    "test-gcp": "node --env-file .env ./src/scripts/signing-test-gcp.js"
   },
   "keywords": [
     "remote",
@@ -14,11 +15,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@google-cloud/kms": "^4.0.1",
     "asn1.js": "^5.4.1",
     "aws-sdk": "^2.1472.0",
     "axios": "^1.5.1",
     "bn.js": "^5.1.3",
     "ethereumjs-util": "^7.0.7",
+    "googleapis": "^129.0.0",
     "icon-sdk-js": "^1.5.2",
     "js-sha3": "^0.8.0"
   }
