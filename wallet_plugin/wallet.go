@@ -2,21 +2,31 @@ package main
 
 import (
 	"bytes"
+	cloudkms "cloud.google.com/go/kms/apiv1"
+	"cloud.google.com/go/kms/apiv1/kmspb"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/remote-signing/wallet_plugin/address"
 	crypto "github.com/remote-signing/wallet_plugin/key"
+	"google.golang.org/api/option"
+	"math/big"
 )
 
 const awsKmsSignOperationMessageType = "DIGEST"
 const awsKmsSignOperationSigningAlgorithm = "ECDSA_SHA_256"
+const (
+	AWS = "1"
+	GCP = "2"
+)
 
 var (
 	secp256k1N, _  = new(big.Int).SetString("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 16)
@@ -62,7 +72,7 @@ func (w Wallet) Sign(data []byte) ([]byte, error) {
 		sBytes = new(big.Int).Sub(secp256k1N, sBigInt).Bytes()
 	}
 
-	signature, err := w.getEthereumSignature(data, rBytes, sBytes)
+	signature, err := getEthereumSignature(data, rBytes, sBytes, w.pkey)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +80,7 @@ func (w Wallet) Sign(data []byte) ([]byte, error) {
 	return signature, nil
 }
 
-func (w Wallet) getEthereumSignature(data []byte, r []byte, s []byte) ([]byte, error) {
+func getEthereumSignature(data []byte, r []byte, s []byte, pkey *crypto.PublicKey) ([]byte, error) {
 	rsSignature := append(adjustSignatureLength(r), adjustSignatureLength(s)...)
 	signature := append(rsSignature, []byte{0}...)
 	// ParseSignatureVRS
@@ -80,7 +90,7 @@ func (w Wallet) getEthereumSignature(data []byte, r []byte, s []byte) ([]byte, e
 	}
 
 	pubKeyFromSig, err := signatureInst.RecoverPublicKey(data)
-	if err != nil || pubKeyFromSig.String() != w.pkey.String() {
+	if err != nil || pubKeyFromSig.String() != pkey.String() {
 		signature = append(rsSignature, []byte{1}...)
 		signatureInst, err = crypto.ParseSignature(signature)
 		if err != nil {
@@ -88,7 +98,7 @@ func (w Wallet) getEthereumSignature(data []byte, r []byte, s []byte) ([]byte, e
 		}
 
 		pubKeyFromSig, err = signatureInst.RecoverPublicKey(data)
-		if err != nil || pubKeyFromSig.String() != w.pkey.String() {
+		if err != nil || pubKeyFromSig.String() != pkey.String() {
 			return nil, errors.New("can not reconstruct public key from sig")
 		}
 	}
@@ -118,6 +128,20 @@ func NewWallet(params map[string]string) (interface{}, error) {
 	//	key, _ = crypto.GenerateKeyPair()
 	//}
 
+	var kmsType string
+	if _, ok := params["kms_type"]; ok {
+		kmsType = params["kms_type"]
+	}
+
+	if kmsType == AWS {
+		return AwsKms(params)
+	} else if kmsType == GCP {
+		return GcpKms(params)
+	}
+	return nil, errors.New("type not supported")
+}
+
+func AwsKms(params map[string]string) (interface{}, error) {
 	var region, accessKeyId, secretAccessKey, keyId string
 	if _, ok := params["region"]; ok {
 		region = params["region"]
@@ -168,6 +192,55 @@ func NewWallet(params map[string]string) (interface{}, error) {
 	fmt.Printf("pubkey: %+v \n", wallet.pkey.SerializeCompressed())
 
 	return wallet, nil
+}
+
+func GcpKms(params map[string]string) (interface{}, error) {
+
+	var projectId, locationId, keyRing, key, keyVersion, credentialPath string
+	if _, ok := params["project_id"]; ok {
+		projectId = params["project_id"]
+	}
+
+	if _, ok := params["location_id"]; ok {
+		locationId = params["location_id"]
+	}
+
+	if _, ok := params["key_ring"]; ok {
+		keyRing = params["key_ring"]
+	}
+
+	if _, ok := params["key"]; ok {
+		key = params["key"]
+	}
+
+	if _, ok := params["key_version"]; ok {
+		keyVersion = params["key_version"]
+	}
+
+	if _, ok := params["credential_path"]; ok {
+		credentialPath = params["credential_path"]
+	}
+
+	if len(projectId)*len(locationId)*len(keyRing)*len(key)*len(keyVersion)*len(credentialPath) == 0 {
+		return nil, errors.New("invalid inputs")
+	}
+
+	var err error
+	gcpKMS := KMS{
+		LocationId:     locationId,
+		ProjectId:      projectId,
+		KeyRing:        keyRing,
+		Key:            key,
+		KeyVersion:     keyVersion,
+		CredentialPath: credentialPath,
+	}
+
+	gcpKMS, err = NewKMSCrypto(gcpKMS)
+	if err != nil {
+		return nil, err
+	}
+
+	return gcpKMS, nil
 }
 
 func getSignatureFromKms(
@@ -240,4 +313,142 @@ func adjustSignatureLength(buffer []byte) []byte {
 		buffer = append(zeroBuf, buffer...)
 	}
 	return buffer
+}
+
+// ///////////////////
+// GG CLOUD - KMS
+type KMS struct {
+	PublicKeyFile string
+	ExtTLSConfig  *tls.Config
+
+	ProjectId          string
+	LocationId         string
+	KeyRing            string
+	Key                string
+	KeyVersion         string
+	CredentialPath     string
+	SignatureAlgorithm x509.SignatureAlgorithm
+	Addr               *address.Address
+	Pkey               *crypto.PublicKey
+	KMSClient          *cloudkms.KeyManagementClient
+}
+
+func NewKMSCrypto(conf KMS) (KMS, error) {
+	if conf.SignatureAlgorithm == x509.UnknownSignatureAlgorithm {
+		conf.SignatureAlgorithm = x509.ECDSAWithSHA256
+	}
+	if conf.SignatureAlgorithm != x509.ECDSAWithSHA256 {
+		return KMS{}, fmt.Errorf("signatureALgorithm must be ECDSAWithSHA256")
+	}
+
+	if conf.ProjectId == "" {
+		return KMS{}, fmt.Errorf("ProjectID cannot be null")
+	}
+	if conf.ExtTLSConfig != nil {
+		if len(conf.ExtTLSConfig.Certificates) > 0 {
+			return KMS{}, fmt.Errorf("certificates value in ExtTLSConfig Ignored")
+		}
+
+		if len(conf.ExtTLSConfig.CipherSuites) > 0 {
+			return KMS{}, fmt.Errorf("cipherSuites value in ExtTLSConfig Ignored")
+		}
+	}
+
+	opt := option.WithCredentialsFile(conf.CredentialPath)
+
+	kmsClient, err := cloudkms.NewKeyManagementClient(context.Background(), opt)
+	if err != nil {
+		fmt.Printf("Error getting kms client %v", err)
+		return KMS{}, err
+	}
+	conf.KMSClient = kmsClient
+	pubKey := conf.PublicKey()
+	if pubKey == nil {
+		return KMS{}, errors.New("error getting pubkey but nil return")
+	}
+
+	return conf, nil
+}
+
+func (t *KMS) PublicKey() *crypto.PublicKey {
+	if t.Pkey == nil {
+		parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.ProjectId, t.LocationId, t.KeyRing, t.Key, t.KeyVersion)
+
+		dresp, err := t.KMSClient.GetPublicKey(context.Background(), &kmspb.GetPublicKeyRequest{Name: parentName})
+		if err != nil {
+			fmt.Printf("Error getting GetPublicKey %v", err)
+			return nil
+		}
+
+		pubKeyBlock, _ := pem.Decode([]byte(dresp.Pem))
+		if pubKeyBlock == nil {
+			fmt.Println("pubKeyBlock is nil")
+			return nil
+		}
+
+		var info struct {
+			AlgID pkix.AlgorithmIdentifier
+			Key   asn1.BitString
+		}
+		_, err = asn1.Unmarshal(pubKeyBlock.Bytes, &info)
+		if err != nil {
+			fmt.Println(err.Error())
+			return nil
+		}
+
+		wantAlg := asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
+		if gotAlg := info.AlgID.Algorithm; !gotAlg.Equal(wantAlg) {
+			fmt.Printf("Google KMS public key %q ASN.1 algorithm %s intead of %s \n", parentName, gotAlg, wantAlg)
+			return nil
+		}
+
+		t.Pkey, err = crypto.ParsePublicKey(info.Key.Bytes)
+		if err != nil {
+			fmt.Println(err.Error())
+			return nil
+		}
+
+		t.Addr = NewAccountAddressFromPublicKey(t.Pkey)
+		if t.Addr == nil {
+			fmt.Println("Addr must not nil")
+		}
+	}
+
+	return t.Pkey
+}
+
+func (t KMS) Address() address.IAddress {
+	return t.Addr
+}
+
+func (t KMS) Sign(data []byte) ([]byte, error) {
+	parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.ProjectId, t.LocationId, t.KeyRing, t.Key, t.KeyVersion)
+
+	signData, err := t.KMSClient.AsymmetricSign(context.Background(), &kmspb.AsymmetricSignRequest{Name: parentName, Data: data})
+	if err != nil {
+		return nil, err
+	}
+
+	var params struct{ R, S *big.Int }
+	_, err = asn1.Unmarshal(signData.Signature, &params)
+	if err != nil {
+		return nil, fmt.Errorf("Google KMS asymmetric signature encoding: %w", err)
+	}
+	var rLen, sLen int // byte size
+	if params.R != nil {
+		rLen = (params.R.BitLen() + 7) / 8
+	}
+	if params.S != nil {
+		sLen = (params.S.BitLen() + 7) / 8
+	}
+	if rLen == 0 || rLen > 32 || sLen == 0 || sLen > 32 {
+		return nil, fmt.Errorf("Google KMS asymmetric signature with %d-byte r and %d-byte s denied on size", rLen, sLen)
+	}
+
+	signature, err := getEthereumSignature(data, params.R.Bytes(), params.S.Bytes(), t.Pkey)
+	if err != nil {
+		return nil, err
+	}
+
+	return signature, nil
 }
