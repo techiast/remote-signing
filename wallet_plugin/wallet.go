@@ -5,7 +5,6 @@ import (
 	cloudkms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -227,12 +226,12 @@ func GcpKms(params map[string]string) (interface{}, error) {
 
 	var err error
 	gcpKMS := KMS{
-		LocationId:     locationId,
-		ProjectId:      projectId,
-		KeyRing:        keyRing,
-		Key:            key,
-		KeyVersion:     keyVersion,
-		CredentialPath: credentialPath,
+		locationId:     locationId,
+		projectId:      projectId,
+		keyRing:        keyRing,
+		key:            key,
+		keyVersion:     keyVersion,
+		credentialPath: credentialPath,
 	}
 
 	gcpKMS, err = NewKMSCrypto(gcpKMS)
@@ -318,50 +317,38 @@ func adjustSignatureLength(buffer []byte) []byte {
 // ///////////////////
 // GG CLOUD - KMS
 type KMS struct {
-	PublicKeyFile string
-	ExtTLSConfig  *tls.Config
-
-	ProjectId          string
-	LocationId         string
-	KeyRing            string
-	Key                string
-	KeyVersion         string
-	CredentialPath     string
-	SignatureAlgorithm x509.SignatureAlgorithm
-	Addr               *address.Address
-	Pkey               *crypto.PublicKey
-	KMSClient          *cloudkms.KeyManagementClient
+	projectId          string
+	locationId         string
+	keyRing            string
+	key                string
+	keyVersion         string
+	credentialPath     string
+	signatureAlgorithm x509.SignatureAlgorithm
+	addr               *address.Address
+	pkey               *crypto.PublicKey
+	kmsClient          *cloudkms.KeyManagementClient
 }
 
 func NewKMSCrypto(conf KMS) (KMS, error) {
-	if conf.SignatureAlgorithm == x509.UnknownSignatureAlgorithm {
-		conf.SignatureAlgorithm = x509.ECDSAWithSHA256
+	if conf.signatureAlgorithm == x509.UnknownSignatureAlgorithm {
+		conf.signatureAlgorithm = x509.ECDSAWithSHA256
 	}
-	if conf.SignatureAlgorithm != x509.ECDSAWithSHA256 {
+	if conf.signatureAlgorithm != x509.ECDSAWithSHA256 {
 		return KMS{}, fmt.Errorf("signatureALgorithm must be ECDSAWithSHA256")
 	}
 
-	if conf.ProjectId == "" {
+	if conf.projectId == "" {
 		return KMS{}, fmt.Errorf("ProjectID cannot be null")
 	}
-	if conf.ExtTLSConfig != nil {
-		if len(conf.ExtTLSConfig.Certificates) > 0 {
-			return KMS{}, fmt.Errorf("certificates value in ExtTLSConfig Ignored")
-		}
 
-		if len(conf.ExtTLSConfig.CipherSuites) > 0 {
-			return KMS{}, fmt.Errorf("cipherSuites value in ExtTLSConfig Ignored")
-		}
-	}
-
-	opt := option.WithCredentialsFile(conf.CredentialPath)
+	opt := option.WithCredentialsFile(conf.credentialPath)
 
 	kmsClient, err := cloudkms.NewKeyManagementClient(context.Background(), opt)
 	if err != nil {
 		fmt.Printf("Error getting kms client %v", err)
 		return KMS{}, err
 	}
-	conf.KMSClient = kmsClient
+	conf.kmsClient = kmsClient
 	pubKey := conf.PublicKey()
 	if pubKey == nil {
 		return KMS{}, errors.New("error getting pubkey but nil return")
@@ -371,10 +358,10 @@ func NewKMSCrypto(conf KMS) (KMS, error) {
 }
 
 func (t *KMS) PublicKey() *crypto.PublicKey {
-	if t.Pkey == nil {
-		parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.ProjectId, t.LocationId, t.KeyRing, t.Key, t.KeyVersion)
+	if t.pkey == nil {
+		parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.projectId, t.locationId, t.keyRing, t.key, t.keyVersion)
 
-		dresp, err := t.KMSClient.GetPublicKey(context.Background(), &kmspb.GetPublicKeyRequest{Name: parentName})
+		dresp, err := t.kmsClient.GetPublicKey(context.Background(), &kmspb.GetPublicKeyRequest{Name: parentName})
 		if err != nil {
 			fmt.Printf("Error getting GetPublicKey %v", err)
 			return nil
@@ -402,29 +389,29 @@ func (t *KMS) PublicKey() *crypto.PublicKey {
 			return nil
 		}
 
-		t.Pkey, err = crypto.ParsePublicKey(info.Key.Bytes)
+		t.pkey, err = crypto.ParsePublicKey(info.Key.Bytes)
 		if err != nil {
 			fmt.Println(err.Error())
 			return nil
 		}
 
-		t.Addr = NewAccountAddressFromPublicKey(t.Pkey)
-		if t.Addr == nil {
+		t.addr = NewAccountAddressFromPublicKey(t.pkey)
+		if t.addr == nil {
 			fmt.Println("Addr must not nil")
 		}
 	}
 
-	return t.Pkey
+	return t.pkey
 }
 
 func (t KMS) Address() address.IAddress {
-	return t.Addr
+	return t.addr
 }
 
 func (t KMS) Sign(data []byte) ([]byte, error) {
-	parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.ProjectId, t.LocationId, t.KeyRing, t.Key, t.KeyVersion)
+	parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.projectId, t.locationId, t.keyRing, t.key, t.keyVersion)
 
-	signData, err := t.KMSClient.AsymmetricSign(context.Background(), &kmspb.AsymmetricSignRequest{Name: parentName, Digest: &kmspb.Digest{
+	signData, err := t.kmsClient.AsymmetricSign(context.Background(), &kmspb.AsymmetricSignRequest{Name: parentName, Digest: &kmspb.Digest{
 		Digest: &kmspb.Digest_Sha256{
 			Sha256: data[:],
 		},
@@ -450,7 +437,7 @@ func (t KMS) Sign(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("Google KMS asymmetric signature with %d-byte r and %d-byte s denied on size", rLen, sLen)
 	}
 
-	signature, err := getEthereumSignature(data, params.R.Bytes(), params.S.Bytes(), t.Pkey)
+	signature, err := getEthereumSignature(data, params.R.Bytes(), params.S.Bytes(), t.pkey)
 	if err != nil {
 		return nil, err
 	}
