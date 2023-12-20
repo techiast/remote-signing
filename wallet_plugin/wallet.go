@@ -424,7 +424,12 @@ func (t KMS) Address() address.IAddress {
 func (t KMS) Sign(data []byte) ([]byte, error) {
 	parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.ProjectId, t.LocationId, t.KeyRing, t.Key, t.KeyVersion)
 
-	signData, err := t.KMSClient.AsymmetricSign(context.Background(), &kmspb.AsymmetricSignRequest{Name: parentName, Data: data})
+	signData, err := t.KMSClient.AsymmetricSign(context.Background(), &kmspb.AsymmetricSignRequest{Name: parentName, Digest: &kmspb.Digest{
+		Digest: &kmspb.Digest_Sha256{
+			Sha256: data[:],
+		},
+	}})
+
 	if err != nil {
 		return nil, err
 	}
