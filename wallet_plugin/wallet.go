@@ -5,7 +5,6 @@ import (
 	cloudkms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"context"
-	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
@@ -317,30 +316,18 @@ func adjustSignatureLength(buffer []byte) []byte {
 // ///////////////////
 // GG CLOUD - KMS
 type KMS struct {
-	projectId          string
-	locationId         string
-	keyRing            string
-	key                string
-	keyVersion         string
-	credentialPath     string
-	signatureAlgorithm x509.SignatureAlgorithm
-	addr               *address.Address
-	pkey               *crypto.PublicKey
-	kmsClient          *cloudkms.KeyManagementClient
+	projectId      string
+	locationId     string
+	keyRing        string
+	key            string
+	keyVersion     string
+	credentialPath string
+	addr           *address.Address
+	pkey           *crypto.PublicKey
+	kmsClient      *cloudkms.KeyManagementClient
 }
 
 func NewKMSCrypto(conf KMS) (KMS, error) {
-	if conf.signatureAlgorithm == x509.UnknownSignatureAlgorithm {
-		conf.signatureAlgorithm = x509.ECDSAWithSHA256
-	}
-	if conf.signatureAlgorithm != x509.ECDSAWithSHA256 {
-		return KMS{}, fmt.Errorf("signatureALgorithm must be ECDSAWithSHA256")
-	}
-
-	if conf.projectId == "" {
-		return KMS{}, fmt.Errorf("ProjectID cannot be null")
-	}
-
 	opt := option.WithCredentialsFile(conf.credentialPath)
 
 	kmsClient, err := cloudkms.NewKeyManagementClient(context.Background(), opt)
