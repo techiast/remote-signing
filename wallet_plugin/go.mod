@@ -42,4 +42,6 @@ require (
 	google.golang.org/protobuf v1.31.0 // indirect
 )
 
-go 1.18
+replace google.golang.org/protobuf v1.31.0 => ./protobuf@v1.31.0
+
+go 1.20
