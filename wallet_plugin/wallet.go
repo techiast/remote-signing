@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	cloudkms "cloud.google.com/go/kms/apiv1"
-	"cloud.google.com/go/kms/apiv1/kmspb"
 	"context"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -14,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/remote-signing/wallet_plugin/address"
+	cloudkms "github.com/remote-signing/wallet_plugin/cloudkms"
+	"github.com/remote-signing/wallet_plugin/cloudkms/kmspb"
 	crypto "github.com/remote-signing/wallet_plugin/key"
 	"google.golang.org/api/option"
 	"math/big"
