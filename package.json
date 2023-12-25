@@ -7,6 +7,7 @@
   "scripts": {
     "test-kms": "node --env-file .env ./src/scripts/signing-test.js",
     "test-gcp": "node --env-file .env ./src/scripts/signing-test-gcp.js",
+    "stress-test": "node ./src/scripts/stress-test.js",
     "import:aws:key": "node --env-file .env ./src/scripts/import-key.js"
   },
   "keywords": [
