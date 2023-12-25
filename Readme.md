@@ -12,7 +12,7 @@ npm i
 #or
 yarn
 ```
-2. create .env bases on the .env.example file and fill your variables
+2. Create .env bases on the .env.example file and fill your variables
 
 
 ```bash
@@ -29,7 +29,7 @@ ICON_ADDRESS_TO=
 ICON_RPC_URL=
 ```
 
-# example
+##### Example:
 ```
 ICON_ADDRESS_TO=hxcf3c97ceb9ee43b0bd1cf1aaecb988b1605af9d2
 ICON_RPC_URL=https://berlin.net.solidwallet.io/api/v3
@@ -37,7 +37,49 @@ ICON_RPC_URL=https://berlin.net.solidwallet.io/api/v3
 
 3. Run demo
 ```bash
-npm test
+npm run test-kms
 # or
-yarn test
+yarn test-kms
+```
+
+
+# Create AWS KMS and import your raw ICON private key to AWS KMS
+### Prerequisites:
+- Create IAM account with access key and secret key with the permissions:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "kms:CreateAlias",
+                "kms:CreateKey",
+                "kms:DeleteAlias",
+                "kms:Describe*",
+                "kms:GenerateRandom",
+                "kms:Get*",
+                "kms:List*",
+                "kms:TagResource",
+                "kms:UntagResource",
+                "iam:ListGroups",
+                "iam:ListRoles",
+                "iam:ListUsers"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+- Make sure you already installed all dependencies by run:
+```bash
+yarn
+# or
+npm i
+```
+### Run cli tool:
+```bash
+yarn import:aws:key
+# or
+npm run import:aws:key
 ```

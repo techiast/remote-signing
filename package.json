@@ -6,7 +6,8 @@
   "module": "commonjs",
   "scripts": {
     "test-kms": "node --env-file .env ./src/scripts/signing-test.js",
-    "test-gcp": "node --env-file .env ./src/scripts/signing-test-gcp.js"
+    "test-gcp": "node --env-file .env ./src/scripts/signing-test-gcp.js",
+    "import:aws:key": "node --env-file .env ./src/scripts/import-key.js"
   },
   "keywords": [
     "remote",
@@ -15,6 +16,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.478.0",
     "@google-cloud/kms": "^4.0.1",
     "asn1.js": "^5.4.1",
     "aws-sdk": "^2.1472.0",
@@ -23,6 +25,7 @@
     "ethereumjs-util": "^7.0.7",
     "googleapis": "^129.0.0",
     "icon-sdk-js": "^1.5.2",
-    "js-sha3": "^0.8.0"
+    "js-sha3": "^0.8.0",
+    "prompts": "^2.4.2"
   }
 }
