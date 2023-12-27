@@ -225,15 +225,11 @@ func GcpKms(params map[string]string) (interface{}, error) {
 
 	var err error
 	gcpKMS := KMS{
-		locationId:     locationId,
-		projectId:      projectId,
-		keyRing:        keyRing,
-		key:            key,
-		keyVersion:     keyVersion,
+		parentName:     fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", projectId, locationId, keyRing, key, keyVersion),
 		credentialPath: credentialPath,
 	}
 
-	gcpKMS, err = NewKMSCrypto(gcpKMS)
+	err = NewKMSCrypto(&gcpKMS)
 	if err != nil {
 		return nil, err
 	}
@@ -316,78 +312,66 @@ func adjustSignatureLength(buffer []byte) []byte {
 // ///////////////////
 // GG CLOUD - KMS
 type KMS struct {
-	projectId      string
-	locationId     string
-	keyRing        string
-	key            string
-	keyVersion     string
+	parentName     string
 	credentialPath string
 	addr           *address.Address
 	pkey           *crypto.PublicKey
 	kmsClient      *cloudkms.KeyManagementClient
 }
 
-func NewKMSCrypto(conf KMS) (KMS, error) {
+func NewKMSCrypto(conf *KMS) error {
 	opt := option.WithCredentialsFile(conf.credentialPath)
 
 	kmsClient, err := cloudkms.NewKeyManagementClient(context.Background(), opt)
 	if err != nil {
 		fmt.Printf("Error getting kms client %v", err)
-		return KMS{}, err
+		return err
 	}
 	conf.kmsClient = kmsClient
-	pubKey := conf.PublicKey()
-	if pubKey == nil {
-		return KMS{}, errors.New("error getting pubkey but nil return")
+
+	dresp, err := kmsClient.GetPublicKey(context.Background(), &kmspb.GetPublicKeyRequest{Name: conf.parentName})
+	if err != nil {
+		fmt.Printf("Error getting GetPublicKey %v", err)
+		return err
 	}
 
-	return conf, nil
+	pubKeyBlock, _ := pem.Decode([]byte(dresp.Pem))
+	if pubKeyBlock == nil {
+		fmt.Println("pubKeyBlock is nil")
+		return errors.New("pubKeyBlock is nil")
+	}
+
+	var info struct {
+		AlgID pkix.AlgorithmIdentifier
+		Key   asn1.BitString
+	}
+	_, err = asn1.Unmarshal(pubKeyBlock.Bytes, &info)
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
+
+	wantAlg := asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
+	if gotAlg := info.AlgID.Algorithm; !gotAlg.Equal(wantAlg) {
+		fmt.Printf("Google KMS public key %q ASN.1 algorithm %s intead of %s \n", conf.parentName, gotAlg, wantAlg)
+		return nil
+	}
+
+	conf.pkey, err = crypto.ParsePublicKey(info.Key.Bytes)
+	if err != nil {
+		fmt.Println(err.Error())
+		return nil
+	}
+
+	conf.addr = NewAccountAddressFromPublicKey(conf.pkey)
+	if conf.addr == nil {
+		fmt.Println("Addr must not nil")
+	}
+
+	return nil
 }
 
-func (t *KMS) PublicKey() []byte {
-	if t.pkey == nil {
-		parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.projectId, t.locationId, t.keyRing, t.key, t.keyVersion)
-
-		dresp, err := t.kmsClient.GetPublicKey(context.Background(), &kmspb.GetPublicKeyRequest{Name: parentName})
-		if err != nil {
-			fmt.Printf("Error getting GetPublicKey %v", err)
-			return nil
-		}
-
-		pubKeyBlock, _ := pem.Decode([]byte(dresp.Pem))
-		if pubKeyBlock == nil {
-			fmt.Println("pubKeyBlock is nil")
-			return nil
-		}
-
-		var info struct {
-			AlgID pkix.AlgorithmIdentifier
-			Key   asn1.BitString
-		}
-		_, err = asn1.Unmarshal(pubKeyBlock.Bytes, &info)
-		if err != nil {
-			fmt.Println(err.Error())
-			return nil
-		}
-
-		wantAlg := asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}
-		if gotAlg := info.AlgID.Algorithm; !gotAlg.Equal(wantAlg) {
-			fmt.Printf("Google KMS public key %q ASN.1 algorithm %s intead of %s \n", parentName, gotAlg, wantAlg)
-			return nil
-		}
-
-		t.pkey, err = crypto.ParsePublicKey(info.Key.Bytes)
-		if err != nil {
-			fmt.Println(err.Error())
-			return nil
-		}
-
-		t.addr = NewAccountAddressFromPublicKey(t.pkey)
-		if t.addr == nil {
-			fmt.Println("Addr must not nil")
-		}
-	}
-
+func (t KMS) PublicKey() []byte {
 	return t.pkey.SerializeCompressed()
 }
 
@@ -396,9 +380,7 @@ func (t KMS) Address() address.IAddress {
 }
 
 func (t KMS) Sign(data []byte) ([]byte, error) {
-	parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.projectId, t.locationId, t.keyRing, t.key, t.keyVersion)
-
-	signData, err := t.kmsClient.AsymmetricSign(context.Background(), &kmspb.AsymmetricSignRequest{Name: parentName, Digest: &kmspb.Digest{
+	signData, err := t.kmsClient.AsymmetricSign(context.Background(), &kmspb.AsymmetricSignRequest{Name: t.parentName, Digest: &kmspb.Digest{
 		Digest: &kmspb.Digest_Sha256{
 			Sha256: data[:],
 		},

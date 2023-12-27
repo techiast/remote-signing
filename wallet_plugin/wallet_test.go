@@ -29,6 +29,11 @@ func TestWalletImport(t *testing.T) {
 	fmt.Printf("signature: %+v", signature)
 }
 
+type walletImpl interface {
+	Sign(data []byte) ([]byte, error)
+	PublicKey() []byte
+}
+
 func TestGCPKms(t *testing.T) {
 	params := make(map[string]string)
 	params["kms_type"] = GCP
@@ -43,7 +48,7 @@ func TestGCPKms(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	walletInst := iWallet.(KMS)
+	walletInst := iWallet.(walletImpl)
 	fmt.Printf("pubkey: %+v \n", walletInst.PublicKey())
 
 	// test sign
@@ -55,6 +60,4 @@ func TestGCPKms(t *testing.T) {
 
 	fmt.Printf("signature: %+v \n", signature)
 	// get pubkey
-
-	fmt.Println(walletInst.Address().String())
 }
