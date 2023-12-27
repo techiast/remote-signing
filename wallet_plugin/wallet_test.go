@@ -44,7 +44,7 @@ func TestGCPKms(t *testing.T) {
 		panic(err)
 	}
 	walletInst := iWallet.(KMS)
-	fmt.Printf("pubkey: %+v \n", walletInst.PublicKey().String())
+	fmt.Printf("pubkey: %+v \n", walletInst.PublicKey())
 
 	// test sign
 	signData, _ := hex.DecodeString("356355dae4212533ce182cbb31492a6c2665fcf8f17e089d929e7a3efd1d1ba1")

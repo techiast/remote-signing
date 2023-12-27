@@ -344,7 +344,7 @@ func NewKMSCrypto(conf KMS) (KMS, error) {
 	return conf, nil
 }
 
-func (t *KMS) PublicKey() *crypto.PublicKey {
+func (t *KMS) PublicKey() []byte {
 	if t.pkey == nil {
 		parentName := fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s/cryptoKeyVersions/%s", t.projectId, t.locationId, t.keyRing, t.key, t.keyVersion)
 
@@ -388,7 +388,7 @@ func (t *KMS) PublicKey() *crypto.PublicKey {
 		}
 	}
 
-	return t.pkey
+	return t.pkey.SerializeCompressed()
 }
 
 func (t KMS) Address() address.IAddress {
