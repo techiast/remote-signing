@@ -11,7 +11,11 @@ https://docs.icon.community/getting-started/how-to-run-a-validator-node
 3. Update docker configuration of your node to include the following options at environment variables:
 ```bash
 GOLOOP_KEY_PLUGIN: "/goloop/config/wallet.so"
-GOLOOP_KEY_PLUGIN_OPTIONS: '{"region":"REGION","access_key_id":"ACCESS_KEY","secret_access_key":"SECRET_KEY","key_id":"KEY_ID"}'
+# KMS TYPE 
+# 1 - AWS 
+GOLOOP_KEY_PLUGIN_OPTIONS: '{"kms_type":"1","region":"REGION","access_key_id":"ACCESS_KEY","secret_access_key":"SECRET_KEY","key_id":"KEY_ID"}'
+# 2 - GCP
+GOLOOP_KEY_PLUGIN_OPTIONS:  '{"kms_type":"2","project_id":"PROJECT_ID","location_id":"REGION","key_ring":"KEY_RING","key":"KEY", "key_version":"VERSION","credential_path": "CRE_PATH"}'
 ```
 4. Run node
 ```bash
