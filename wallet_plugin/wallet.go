@@ -234,6 +234,9 @@ func GcpKms(params map[string]string) (interface{}, error) {
 		return nil, err
 	}
 
+	fmt.Printf("wallet address: %+v \n", gcpKMS.addr.String())
+	fmt.Printf("pubkey: %+v \n", gcpKMS.pkey.SerializeCompressed())
+
 	return gcpKMS, nil
 }
 
