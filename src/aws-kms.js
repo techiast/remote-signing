@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-const fs = require('fs')
 const path = require('path')
 const prompts = require('prompts')
 const asn1 = require('asn1.js')
@@ -8,6 +7,7 @@ const { sha3_256: sha3256 } = require('js-sha3')
 const { KMSClient, CreateKeyCommand, GetParametersForImportCommand, ImportKeyMaterialCommand, GetPublicKeyCommand } = require('@aws-sdk/client-kms')
 const { STSClient, GetCallerIdentityCommand } = require('@aws-sdk/client-sts')
 const { readFileSync, writeFileSync } = require('fs')
+const { convertEthPrivateKeyToDER, encryptPrivateKey, ensureTempFolderExists } = require('./utils.js')
 const tempFolderPath = path.join(__dirname, 'temp')
 
 let kms = {}
@@ -92,7 +92,7 @@ const policy = {
 
 function welcomeScreen() {
   console.log('\n-------------------------------------------------')
-  console.log('Welcome to the Remote Sign with KMS Utility Script!')
+  console.log('Welcome to the Remote Sign with AWS KMS Utility Script!')
   console.log('-------------------------------------------------\n')
 }
 
@@ -147,7 +147,7 @@ function rebuildKmsPolicy(identity) {
   console.log('\r ✔ Rebuild KMS policy successful\n')
 }
 
-async function createAsymmetricKey(aliasName) {
+async function createAsymmetricKey() {
   const params = new CreateKeyCommand({
     KeyUsage: 'SIGN_VERIFY',
     CustomerMasterKeySpec: 'ECC_SECG_P256K1',
@@ -189,44 +189,10 @@ async function importKeyToKMS(keyId) {
     ExpirationModel: 'KEY_MATERIAL_DOES_NOT_EXPIRE'
   })
 
-  const result = await kms.send(params)
+  await kms.send(params)
 }
 
-function convertEthPrivateKeyToDER(rawPrivateKey) {
-  const command = `echo 302e0201010420${rawPrivateKey}a00706052b8104000a | xxd -r -p | openssl pkcs8 -topk8 -outform der -nocrypt > ${path.join(tempFolderPath, 'ECC_SECG_P256K1_PrivateKey.der')}`
-
-  try {
-    execSync(command)
-    console.log('\r ✔ ECC_SECG_P256K1_PrivateKey.der created \n')
-  } catch (err) {
-    console.error('\rError converting Ethereum private key:', err)
-    throw err
-  }
-}
-
-function encryptPrivateKey() {
-  const command = `openssl pkeyutl -encrypt -in ${path.join(tempFolderPath, 'ECC_SECG_P256K1_PrivateKey.der')} -out ${path.join(tempFolderPath, 'EncryptedKeyMaterial.bin')} -inkey ${path.join(tempFolderPath, 'WrappingPublicKey.bin')} -keyform DER -pubin -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256`
-  try {
-    execSync(command)
-    console.log('\r ✔ EncryptedKeyMaterial.bin created \n')
-  } catch (err) {
-    console.error('\rError converting Ethereum private key:', err)
-    throw err
-  }
-}
-
-function ensureTempFolderExists() {
-  try {
-    if (!fs.existsSync(tempFolderPath)) {
-      fs.mkdirSync(tempFolderPath)
-      console.log(`\r ✔ Temporary folder created at: ${tempFolderPath}\n`)
-    }
-  } catch (err) {
-    console.error('Error creating temporary folder:', err + '\n')
-    throw err
-  }
-}
-async function importKey() {
+async function importKeyAwsKms() {
   const response = await prompts([
     {
       type: 'password',
@@ -243,7 +209,7 @@ async function importKey() {
   ])
   try {
     if (!response.key || !response.name) {
-      console.error('Missing required information\n')
+      throw new Error('Missing required information\n')
     }
 
     const indentity = await getCallerIdentity()
@@ -290,7 +256,7 @@ const EcdsaPubKey = asn1.define('EcdsaPubKey', function () {
   )
 })
 
-async function getWalletAddress() {
+async function getWalletAddressAwsKms() {
   const response = await prompts([
     {
       type: 'text',
@@ -329,20 +295,20 @@ async function selectMenu() {
 
   switch (options.option) {
     case 'importKey':
-      await importKey()
+      await importKeyAwsKms()
       break
     case 'getWalletAddress':
-      await getWalletAddress()
+      await getWalletAddressAwsKms()
       break
     case 'exit':
       console.log('Exiting the program. Goodbye!')
   }
 }
 
-(async () => {
-  welcomeScreen()
-  await setAccessKeys()
 
+async function handleAwsKms() {
+  await welcomeScreen()
+  await setAccessKeys()
   kms = new KMSClient({
     region,
     credentials: {
@@ -358,7 +324,11 @@ async function selectMenu() {
       secretAccessKey
     }
   })
-
   await selectMenu()
 }
-)()
+
+module.exports = {
+  handleAwsKms,
+  getWalletAddressAwsKms,
+  importKeyAwsKms
+}

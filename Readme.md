@@ -2,7 +2,8 @@
 
 ## I. Prerequisites
 
-### 1. Create KMS asymmetric key in AWS KMS
+### 1. Create IAM account
+#### Amazon Web Service
 Create IAM account with access key and secret key with the permissions:
 
 ```json
@@ -31,6 +32,21 @@ Create IAM account with access key and secret key with the permissions:
 }
 ```
 
+#### Google Cloud Platform
+Create IAM account with the permission as image below and download your JSON
+<img width="547" alt="Screenshot 2024-01-05 at 11 20 37" src="https://github.com/techiast/remote-signing/assets/116485607/9e020662-2b10-43bb-9c46-dcab9e4fb659">
+
+
+***Note:** To create JSON Credential (Key) please follow the menu (IAM & Admin > Service Account > Create Service Account)*
+
+#### Install Node dependencies packages
+
+**Version:**
+
+- *node:* >= v20.10.0
+- *npm:* >= 10.2.3
+- *yarn:* >= 1.22.19
+
 Make sure you already installed all dependencies by run:
 
 ```bash
@@ -40,22 +56,27 @@ npm i
 ```
 
 
-### 2. Import Private Key to KMS
+## 2. Run CLI tool to import Private Key to KMS
 Run the following command
 ```bash
-yarn import:aws:key
+yarn cli:run
 # or
-npm run import:aws:key
+npm run cli:run
 ```
-#### Screenshot for option `Import Key`
+<img width="452" alt="Screenshot 2024-01-05 at 11 28 40" src="https://github.com/techiast/remote-signing/assets/116485607/1bbf078a-f4e6-479e-8ea7-21d402edd58e">
 
-<img width="916" alt="Screenshot 2023-12-25 at 23 18 00" src="https://github.com/techiast/remote-signing/assets/116485607/33263071-d15f-40ce-811a-3b2668a98dcf">
+
+#### Screenshot for option `Import Key`
+<img width="916" alt="Screenshot 2023-12-25 at 23 18 00" src="https://github.com/techiast/remote-signing/assets/116485607/a67d0efa-7199-453f-bdf8-68dd6491bcd3">
+
 
 #### Screenshot for option `Get Wallet Address`
 
 <img width="534" alt="Screenshot 2023-12-25 at 23 18 27" src="https://github.com/techiast/remote-signing/assets/116485607/8b09a722-c9ac-4897-b84a-64102d938ec1">
 
-## II. Configure environment variables
+## II. Configure environment variables for testing
+The purpose of this is to send ICX to another ICON wallet address using KMS to sign.
+
 Install dependencies
 
 ```bash
@@ -75,6 +96,15 @@ AWS_REGION=
 AWS_ACCESS_KEY=
 AWS_SECRET_KEY=
 
+# GCP config
+PROJECT_ID=
+LOCATION_ID=
+KEY_RING_ID=
+KEY_ID=
+VERSION_ID=
+# copy your json credential file to root folder and leave the name of it here
+JSON_CREDENTIAL_PATH=
+
 # ICON config
 ICON_ADDRESS_TO=
 ICON_RPC_URL=
@@ -88,9 +118,11 @@ ICON_RPC_URL=https://berlin.net.solidwallet.io/api/v3
 ```
 To run a simple demo
 ```bash
-npm run test-kms
+npm run test-aws
+npm run test-gcp
 # or
-yarn test-kms
+yarn test-aws
+yarn test-gcp
 ```
 
 ## III. Perform stress test

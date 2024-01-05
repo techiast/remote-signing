@@ -4,21 +4,18 @@ const axios = require('axios')
 const fs = require('fs')
 const path = require('path')
 const crc32c = require('fast-crc32c');
-const crypto = require('crypto');
 const asn1 = require('asn1.js')
 const ethutil = require('ethereumjs-util')
 const BN = require('bn.js')
-const secp256k1 = require('secp256k1');
 const { keccak256, sha3_256: sha3256 } = require('js-sha3')
 
 // Google Cloud KMS configuration
-const projectId = 'remote-sign-407206'
-const locationId = 'asia-southeast1'
-const keyRingId = 'remote-sign'
-const keyName = 'remote-sign'
-const keyId = 'remote-sign';
-const versionId = '1';
-const serviceAccountKeyPath = path.join(path.join(__dirname, './'), 'remote-sign-407206-8b50af709ec3.json')
+const projectId = process.env.PROJECT_ID || 'remote-sign-407206'
+const locationId = process.env.LOCATION_ID || 'asia-southeast1'
+const keyRingId = process.env.KEY_RING_ID || 'remote-sign'
+const keyId = process.env.KEY_ID || 'remote-sign';
+const versionId = process.env.VERSION_ID || '1';
+const serviceAccountKeyPath = path.join(path.join(__dirname, '../../../'), process.env.JSON_CREDENTIAL_PATH || 'remote-sign-407206-8b50af709ec3.json');
 
 // ICON transaction configuration
 const ICON_ADDRESS_TO = process.env.ICON_ADDRESS_TO
@@ -30,10 +27,6 @@ const ICON_TX_STEP_LIMIT = IconConverter.toHex(100000)
 const ICON_TX_NONCE = IconConverter.toHex(1)
 const ICON_TX_VERSION = IconConverter.toHex(3)
 const ICON_TX_TIMESTAMP = IconConverter.toHex((new Date()).getTime() * 1000)
-
-
-// ICON transaction configuration
-const nodeEndpoint = 'https://ctz.solidwallet.io/api/v3';
 
 
 const EcdsaSigAsnParse = asn1.define('EcdsaSig', function () {
@@ -54,8 +47,9 @@ const EcdsaPubKey = asn1.define('EcdsaPubKey', function () {
 })
 
 function recoverPubKeyFromSig(msg, r, s, v) {
-  const rBuffer = r
-  const sBuffer = s
+  const rBuffer = r.toBuffer();
+  const sBuffer = s.toBuffer();
+
 
   const pubKey = ethutil.ecrecover(msg, v, rBuffer, sBuffer)
   const addrBuf = Buffer.from(sha3256.array(pubKey).slice(-20))
@@ -63,6 +57,8 @@ function recoverPubKeyFromSig(msg, r, s, v) {
 
   return recoveredICONAddr
 }
+
+
 // Load the service account JSON key file
 async function loadServiceAccountKey() {
   try {
@@ -75,27 +71,18 @@ async function loadServiceAccountKey() {
 }
 
 // Sign data using Google Cloud KMS
-async function signWithKMS(dataToSign, versionName, client) {
+async function signWithKMS(digestBuffer, versionName, client) {
   try {
-    // Convert the data to Buffer if it's not already
-    const dataBuffer = Buffer.from(dataToSign);
-
     // Create a digest of the message.
-    const hash = crypto.createHash('sha256');
-    hash.update(dataBuffer);
-    const digest = hash.digest();
-
-    // Optional but recommended: Compute digest's CRC32C.
-    const digestCrc32c = crc32c.calculate(digest);
-
+    // const hash = crypto.createHash('sha256');
+    // hash.update(digestBuffer);
+    // const digest = hash.digest();
     // Sign the message with Cloud KMS
+
     const [signResponse] = await client.asymmetricSign({
       name: versionName,
       digest: {
-        sha256: digest,
-      },
-      digestCrc32c: {
-        value: digestCrc32c,
+        sha256: digestBuffer,
       },
     });
 
@@ -103,16 +90,6 @@ async function signWithKMS(dataToSign, versionName, client) {
     if (signResponse.name !== versionName) {
       throw new Error('AsymmetricSign: request corrupted in-transit');
     }
-    if (!signResponse.verifiedDigestCrc32c) {
-      throw new Error('AsymmetricSign: request corrupted in-transit');
-    }
-    if (
-      crc32c.calculate(signResponse.signature) !==
-      Number(signResponse.signatureCrc32c.value)
-    ) {
-      throw new Error('AsymmetricSign: response corrupted in-transit');
-    }
-
     // Example of how to display signature. Encode the output before printing.
     const encoded = signResponse.signature.toString('base64');
     console.log(`Signature: ${encoded}`);
@@ -158,7 +135,7 @@ function findICONSig(signature) {
   if (signature === undefined) {
     throw new Error('Signature is undefined.')
   }
-  const decoded = EcdsaSigAsnParse.decode(signature, 'der')
+  const decoded = EcdsaSigAsnParse.decode(Buffer.from(signature, 'base64'), 'der')
   const r = decoded.r
   let s = decoded.s
   const secp256k1N = new BN('fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141', 16)
@@ -172,6 +149,49 @@ function findICONSig(signature) {
   return { r, s }
 }
 
+function getICONAddress(publicKey) {
+  console.log('Start to get KMS public key')
+
+  const base64Key = publicKey.replace(/(-----(BEGIN|END) PUBLIC KEY-----|\n)/g, '');
+  const derKey = Buffer.from(base64Key, 'base64');
+
+  const res = EcdsaPubKey.decode(derKey, 'der')
+  let pubKeyBuffer = res.pubKey.data
+  pubKeyBuffer = pubKeyBuffer.slice(1)
+
+  // Convert the public key to hex using sha3_256
+  const iconPublicKeySha3 = Buffer.from(sha3256.array(pubKeyBuffer).slice(-20))
+
+  // Convert the public key to hex using keccak256
+  const iconPublicKeyKeccak = Buffer.from(keccak256.array(pubKeyBuffer).slice(-20))
+
+  const iconAddress = 'hx' + iconPublicKeySha3.toString('hex')
+  const ethAddress = '0x' + iconPublicKeyKeccak.toString('hex')
+  console.log('ICON Public Key (sha3_256):', iconAddress)
+  console.log('ICON Public Key (keccak256):', ethAddress)
+  return iconAddress
+}
+
+async function getPublicKey(client, versionName) {
+  const [publicKey] = await client.getPublicKey({
+    name: versionName,
+  });
+
+  // Optional, but recommended: perform integrity verification on publicKey.
+  // For more details on ensuring E2E in-transit integrity to and from Cloud KMS visit:
+  // https://cloud.google.com/kms/docs/data-integrity-guidelines
+  if (publicKey.name !== versionName) {
+    throw new Error('GetPublicKey: request corrupted in-transit');
+  }
+  if (crc32c.calculate(publicKey.pem) !== Number(publicKey.pemCrc32c.value)) {
+    throw new Error('GetPublicKey: response corrupted in-transit');
+  }
+
+  console.log(`Public key pem: ${publicKey.pem}`);
+
+  return publicKey.pem;
+}
+
 // Create ICON transaction after signing
 async function createIconTransaction() {
   try {
@@ -180,13 +200,17 @@ async function createIconTransaction() {
 
     const client = new KeyManagementServiceClient({ credentials: serviceAccountKey });
 
-    // Build the version name
+    // // Build the version name
     const versionName = client.cryptoKeyVersionPath(projectId, locationId, keyRingId, keyId, versionId);
+
+    const publicKeyPem = await getPublicKey(client, versionName);
+
+    const iconAddress = getICONAddress(publicKeyPem);
 
     // Create an ICON transaction (example: transfer 1 ICX from 'fromAddress' to 'toAddress')
     const iconTx = new IconBuilder.IcxTransactionBuilder()
       .to(ICON_ADDRESS_TO)
-      .from('hxcc4de7edbe8a0d93b866c44b76a0ce080c193191')
+      .from(iconAddress)
       .value(ICON_TX_VALUE)
       .nid(ICON_TX_NID)
       .stepLimit(ICON_TX_STEP_LIMIT)
@@ -195,20 +219,19 @@ async function createIconTransaction() {
       .timestamp(ICON_TX_TIMESTAMP)
       .build()
 
-    const dataToSign = JSON.stringify(iconTx);
+    const digestBuffer = Buffer.from(IconUtil.makeTxHash(iconTx), 'hex')
 
-    // Sign the data using Cloud KMS
-    const iconTxHash = Buffer.from(IconUtil.makeTxHash(iconTx), 'hex')
-    const signature = await signWithKMS(iconTxHash, versionName, client);
+    const signature = await signWithKMS(digestBuffer, versionName, client);
 
-    // const sign = findICONSig(signature)
-    // const recoveredPubAddr = findRightKey(iconTxHash, sign.r, sign.s, 'hxcc4de7edbe8a0d93b866c44b76a0ce080c193191')
-    // const signatureRSV = Buffer.from(sign.r.toString(16) + sign.s.toString(16) + '0' + (recoveredPubAddr.v - 27).toString(16), 'hex').toString('base64')
-    // const response = await sendSignedTransaction(iconTx, signatureRSV)
 
-    // console.log('Transaction Hash:', response);
+    const sign = findICONSig(signature.toString('base64'));
+    const recoveredPubAddr = findRightKey(digestBuffer, sign.r, sign.s, iconAddress)
+    const signatureRSV = Buffer.from(sign.r.toString(16) + sign.s.toString(16) + '0' + (recoveredPubAddr.v - 27).toString(16), 'hex').toString('base64')
+    const response = await sendSignedTransaction(iconTx, signatureRSV)
+
+    console.log('Transaction Hash:', response);
   } catch (err) {
-     console.error('Error:', err);
+    console.error('Error:', err);
   }
 }
 

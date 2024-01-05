@@ -4,25 +4,25 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
-
-
     {
       "type": "node",
       "request": "launch",
-      "name": "ICON",
+      "name": "GCP",
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/main.js"
+      "program": "${workspaceFolder}/src/scripts/test/signing-test-gcp.js",
+      "envFile": "${workspaceFolder}/.env",
     },
     {
       "type": "node",
       "request": "launch",
-      "name": "ETH",
+      "name": "AWS",
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/aws-kms-sign.js"
-    }
+      "program": "${workspaceFolder}/src/scripts/test/signing-test.js",
+      "envFile": "${workspaceFolder}/.env",
+    },
   ]
 }
