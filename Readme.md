@@ -63,7 +63,7 @@ yarn cli:run
 # or
 npm run cli:run
 ```
-<img width="452" alt="Screenshot 2024-01-05 at 11 28 40" src="https://github.com/techiast/remote-signing/assets/116485607/1bbf078a-f4e6-479e-8ea7-21d402edd58e">
+<img width="495" alt="Screenshot 2024-01-08 at 12 18 48" src="https://github.com/techiast/remote-signing/assets/116485607/3c2294e6-a141-444a-930c-86f8e6a9be18">
 
 
 #### Screenshot for option `Import Key`
