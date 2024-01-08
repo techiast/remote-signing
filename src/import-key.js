@@ -20,6 +20,7 @@ async function selectKMSType() {
       choices: [
         { title: 'Google Cloud KMS', value: KMS_TYPE.GCP },
         { title: 'Amazon Web Service KMS', value: KMS_TYPE.AWS },
+        { title: 'Azure KMS', value: '', },
         { title: 'Exit', value: 'exit' }
       ]
     }
